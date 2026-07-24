@@ -2,7 +2,8 @@
 tron.bank Migrating to FastAPI for developing pure Core Banking API
 ***
 ## Origin
-**Modern Core Banking System written in Python**
+**Modern Core Banking System written in Python with FastAPI (formerly with Django)**
+[*Old project with Django](https://github.com/Musulmankul05/tron-bank)
 
 ## Features
 * Atomic transactions
