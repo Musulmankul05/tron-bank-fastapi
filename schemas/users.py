@@ -25,3 +25,7 @@ class UserLoginSchema(BaseModel):
     phone: str | None = None
     username: str | None = None
     password: str
+
+class TokenSchema(BaseModel):
+    access_token: str
+    token_type: str = 'bearer'
