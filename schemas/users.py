@@ -1,5 +1,7 @@
 from datetime import date
-from pydantic import BaseModel, Field, EmailStr
+
+from pydantic import BaseModel, EmailStr
+
 
 class UserCreateSchema(BaseModel):
     username: str
@@ -12,6 +14,7 @@ class UserCreateSchema(BaseModel):
     totp_secret: str | None = None
     country: str | None = None
 
+
 class UserResponseSchema(BaseModel):
     id: int
     username: str
@@ -21,11 +24,13 @@ class UserResponseSchema(BaseModel):
     phone: str
     kyc_status: str
 
+
 class UserLoginSchema(BaseModel):
     phone: str | None = None
     username: str | None = None
     password: str
 
+
 class TokenSchema(BaseModel):
     access_token: str
-    token_type: str = 'bearer'
+    token_type: str = "bearer"

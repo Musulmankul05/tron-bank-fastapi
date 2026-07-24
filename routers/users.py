@@ -1,22 +1,34 @@
 from typing import Optional
-from sqlalchemy import select, or_
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from models.users import UserModel
+
 from database import get_session
-from fastapi import Depends, HTTPException, status, APIRouter
-from schemas.users import UserCreateSchema, UserResponseSchema, UserLoginSchema, TokenSchema
-from utils.security import hash_password, verify_password, auth
+from models.users import UserModel
+from schemas.users import (
+    TokenSchema,
+    UserCreateSchema,
+    UserLoginSchema,
+    UserResponseSchema,
+)
+from utils.security import auth, hash_password, verify_password
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
-@router.post("/register", response_model=UserResponseSchema, status_code=status.HTTP_201_CREATED)
-async def register_user(payload: UserCreateSchema, db: AsyncSession = Depends(get_session)):
-    """
-        Registration Endpoint
 
-        Args:
-            payload (UserCreateSchema): Example from Pydantic Schema
-            db (AsyncSession): Database session
+@router.post(
+    "/register", response_model=UserResponseSchema, status_code=status.HTTP_201_CREATED
+)
+async def register_user(
+    payload: UserCreateSchema, db: AsyncSession = Depends(get_session)
+):
+    """
+    Registration Endpoint
+
+    Args:
+        payload (UserCreateSchema): Example from Pydantic Schema
+        db (AsyncSession): Database session
     """
     query = select(UserModel).where(
         (UserModel.username == payload.username) | (UserModel.phone == payload.phone)
@@ -26,24 +38,24 @@ async def register_user(payload: UserCreateSchema, db: AsyncSession = Depends(ge
 
     if existing_user:
         raise HTTPException(
-            status_code = status.HTTP_400_BAD_REQUEST,
-            detail = "user exists"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="user exists"
         )
-    
+
     hashed_pwd = hash_password(payload.password)
     new_user = UserModel(
-        first_name = payload.first_name,
-        last_name = payload.last_name,
-        username = payload.username,
-        hashed_password = hashed_pwd,
-        phone = payload.phone,
-        email = payload.email,
-        country = payload.country        
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        username=payload.username,
+        hashed_password=hashed_pwd,
+        phone=payload.phone,
+        email=payload.email,
+        country=payload.country,
     )
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
     return new_user
+
 
 @router.post("/login", response_model=TokenSchema, status_code=status.HTTP_200_OK)
 async def login_user(creds: UserLoginSchema, db: AsyncSession = Depends(get_session)):
@@ -54,24 +66,30 @@ async def login_user(creds: UserLoginSchema, db: AsyncSession = Depends(get_sess
         conditions.append(UserModel.phone == creds.phone)
 
     if not conditions:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Enter username or phone")
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="Enter username or phone"
+        )
     query = select(UserModel).where(or_(*conditions))
     result = await db.execute(query)
     user = result.scalar_one_or_none()
     if user is not None and verify_password(creds.password, user.hashed_password):
         token = auth.create_access_token(uid=str(user.id))
         return {"access_token": token}
-    raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Incorrect username/phone or password")
+    raise HTTPException(
+        status.HTTP_401_UNAUTHORIZED, detail="Incorrect username/phone or password"
+    )
 
 
 @router.get("/users", response_model=list[UserResponseSchema])
-async def get_users(db: AsyncSession = Depends(get_session),  
-                    username: Optional[str | None] = None):
+async def get_users(
+    db: AsyncSession = Depends(get_session), username: Optional[str | None] = None
+):
     query = select(UserModel)
     if username:
         query = query.where(UserModel.username == username)
     result = await db.execute(query)
     return result.scalars().all()
+
 
 @router.get("/users/{user_id}")
 async def get_user_by_id(user_id: int, db: AsyncSession = Depends(get_session)):
