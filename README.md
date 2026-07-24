@@ -18,6 +18,7 @@ See [old project with Django](https://github.com/Musulmankul05/tron-bank)
 
 ## Stacks
 * FastAPI (Pydantic)
-* SQLAlchemy
+* SQLAlchemy (Async ORM)
 * PostgreSQL (asyncpg)
-* PyOTP
+* PyOTP (2FA Secret)
+* pwdlib with Argon2 (password hashing)
