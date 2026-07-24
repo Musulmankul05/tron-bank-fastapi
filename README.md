@@ -11,7 +11,7 @@ tron.bank Migrating to FastAPI for developing pure Core Banking API
 * Fixed race conditions while bunch transaction
 * Digital Signature encrypted to Base64
 * Fixed N + 1 Query problem
-* 2FA Authentication using TOTP (Time-based One-Time Password)
+* 2FA Authentication using TOTP (Time-based One-Time Password)https://github.com/Musulmankul05/tron-bank-fastapi
 * Backup codes in case when User lost his password or authenticator
 * _Authentication with Mail (may not implemented)_
 
