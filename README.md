@@ -17,7 +17,10 @@ See [old project with Django](https://github.com/Musulmankul05/tron-bank)
 * _Authentication with Mail (may not implemented)_
 
 ## Stacks
-* FastAPI (Pydantic)
+* Python (3.14+)
+* FastAPI
+* Pydantic (Schemas validating)
+* Alembic (DB migrations)
 * SQLAlchemy (Async ORM)
 * PostgreSQL (asyncpg)
 * PyOTP (2FA Secret)
