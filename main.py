@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from router import users
+from routers import users
 import uvicorn
 
 app = FastAPI(title="root")
