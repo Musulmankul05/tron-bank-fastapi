@@ -20,3 +20,8 @@ class UserResponseSchema(BaseModel):
     last_name: str
     phone: str
     kyc_status: str
+
+class UserLoginSchema(BaseModel):
+    phone: str | None = None
+    username: str | None = None
+    password: str
