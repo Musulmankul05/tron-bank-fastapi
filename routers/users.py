@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +12,7 @@ from schemas.users import (
     UserLoginSchema,
     UserResponseSchema,
 )
+from utils.dependencies import get_current_user
 from utils.security import auth, hash_password, verify_password
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -58,7 +59,9 @@ async def register_user(
 
 
 @router.post("/login", response_model=TokenSchema, status_code=status.HTTP_200_OK)
-async def login_user(creds: UserLoginSchema, db: AsyncSession = Depends(get_session)):
+async def login_user(
+    respone: Response, creds: UserLoginSchema, db: AsyncSession = Depends(get_session)
+):
     conditions = []
     if creds.username:
         conditions.append(UserModel.username == creds.username)
@@ -74,6 +77,7 @@ async def login_user(creds: UserLoginSchema, db: AsyncSession = Depends(get_sess
     user = result.scalar_one_or_none()
     if user is not None and verify_password(creds.password, user.hashed_password):
         token = auth.create_access_token(uid=str(user.id))
+        respone.set_cookie("auth_access_token", token)
         return {"access_token": token}
     raise HTTPException(
         status.HTTP_401_UNAUTHORIZED, detail="Incorrect username/phone or password"
@@ -100,3 +104,8 @@ async def get_user_by_id(user_id: int, db: AsyncSession = Depends(get_session)):
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="User not found")
     return user
+
+
+@router.get("/me", response_model=UserResponseSchema)
+async def get_my_profile(current_user: UserModel = Depends(get_current_user)):
+    return current_user
