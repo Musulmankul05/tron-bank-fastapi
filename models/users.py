@@ -34,6 +34,11 @@ class UserModel(Base):
     is_phone_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     totp_secret: Mapped[str | None] = mapped_column(String(32), nullable=True)
     country: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    
+    cards: Mapped[list["CardModel"]] = relationship(back_populates="owner")
+    backups: Mapped[list["BackupCodesModel"]] = relationship(back_populates="user_backups")
+    kyc: Mapped["KYCModel"] = relationship(back_populates="user")
+    
 
 
 class BackupCodesModel(Base):
@@ -41,7 +46,7 @@ class BackupCodesModel(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    user: Mapped["UserModel"] = relationship(backref="backups")
+    user_backups: Mapped["UserModel"] = relationship(back_populates="backups")
     code: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
 
@@ -57,7 +62,7 @@ class KYCModel(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), unique=True
     )
-    user: Mapped["UserModel"] = relationship(backref="kyc")
+    user: Mapped["UserModel"] = relationship(back_populates="kyc")
     inn: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     account_type: Mapped[AccountType_choice] = mapped_column(
         Enum(AccountType_choice), default=AccountType_choice.PRIVATE

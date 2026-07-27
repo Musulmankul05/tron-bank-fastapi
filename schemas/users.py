@@ -24,6 +24,8 @@ class UserResponseSchema(BaseModel):
     phone: str
     kyc_status: str
 
+    model_config = {"from_attributes": True}
+
 
 class UserLoginSchema(BaseModel):
     phone: str | None = None
