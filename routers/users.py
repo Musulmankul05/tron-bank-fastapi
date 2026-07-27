@@ -60,14 +60,14 @@ async def register_user(
 
 @router.post("/login", response_model=TokenSchema, status_code=status.HTTP_200_OK)
 async def login_user(
-    respone: Response, creds: UserLoginSchema, db: AsyncSession = Depends(get_session)
+    response: Response, creds: UserLoginSchema, db: AsyncSession = Depends(get_session)
 ):
     conditions = []
     if creds.username:
         conditions.append(UserModel.username == creds.username)
     if creds.phone:
         conditions.append(UserModel.phone == creds.phone)
-
+    print(f"phone: {creds.phone}\nusername: {creds.username}")
     if not conditions:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, detail="Enter username or phone"
@@ -77,11 +77,17 @@ async def login_user(
     user = result.scalar_one_or_none()
     if user is not None and verify_password(creds.password, user.hashed_password):
         token = auth.create_access_token(uid=str(user.id))
-        respone.set_cookie("auth_access_token", token)
+        response.set_cookie("auth_access_token", token)
         return {"access_token": token}
     raise HTTPException(
         status.HTTP_401_UNAUTHORIZED, detail="Incorrect username/phone or password"
     )
+
+
+@router.post("/logout")
+async def logout_user(response: Response):
+    response.delete_cookie("auth_access_token")
+    return {"message": "Logout success"}
 
 
 @router.get("/users", response_model=list[UserResponseSchema])
