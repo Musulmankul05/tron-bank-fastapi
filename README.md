@@ -10,6 +10,7 @@ See [old project with Django](https://github.com/Musulmankul05/tron-bank)
 * Atomic transactions
 * Sending cash via phone number or username
 * Fixed race conditions while bunch transaction
+* Asynchronous queries 
 * Digital Signature encrypted to Base64
 * Fixed N + 1 Query problem
 * 2FA Authentication using TOTP (Time-based One-Time Password)
