@@ -1,6 +1,7 @@
+from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from models.cards import Currencies_choice
 
@@ -17,5 +18,10 @@ class CardResponseSchema(BaseModel):
     balance: Decimal
     name: str | None = None
     favorite: bool
+    expiration_date: datetime
+
+    @computed_field
+    def expiration_date_formatted(self) -> str:
+        return self.expiration_date.strftime("%m/%y")
 
     model_config = {"from_attributes": True}
