@@ -2,7 +2,7 @@ import enum
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Enum, ForeignKey, Numeric, String, DateTime
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -33,7 +33,7 @@ class CardModel(Base):
         Numeric(precision=12, scale=2), default=Decimal("0.00")
     )
     favorite: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     expiration_date: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=default_expiration_date
+        DateTime(timezone=True), default=default_expiration_date
     )

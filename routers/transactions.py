@@ -1,0 +1,101 @@
+from decimal import Decimal
+from logging import raiseExceptions
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
+
+from database import get_session
+from models import UserModel
+from models.cards import CardModel, Currencies_choice
+from models.transactions import TransactionModel, TransactionStatus_choices
+from schemas.transactions import TransactionCreateSchema, TransactionResponseSchema
+from utils.dependencies import get_current_user
+
+router = APIRouter(prefix="/transactions", tags=["Transactions"])
+
+EXCHANGE_RATES = {
+    (Currencies_choice.SOM, Currencies_choice.DOLLAR): Decimal("0.011"),
+    (Currencies_choice.DOLLAR, Currencies_choice.SOM): Decimal("87.50"),
+}
+
+
+def calculate_exchanged(
+    sender_currency, receiver_currency, amount: Decimal
+) -> tuple[Decimal, Decimal]:
+    if sender_currency == receiver_currency:
+        return amount, Decimal("1.0000")
+    rate_key = (sender_currency, receiver_currency)
+    if rate_key not in EXCHANGE_RATES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Converting from {sender_currency.value} to {receiver_currency.value} is not available",
+        )
+    rate = EXCHANGE_RATES[rate_key]
+    received = (amount * rate).quantize(Decimal("0.01"))
+    return received, rate
+
+
+@router.post(
+    "/transfer",
+    response_model=TransactionResponseSchema,
+    status_code=status.HTTP_201_CREATED,
+)
+async def transfer(
+    payload: TransactionCreateSchema,
+    db: AsyncSession = Depends(get_session),
+    current_user: UserModel = Depends(get_current_user),
+):
+    if payload.sender_card_id == payload.receiver_card_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Wrong Card")
+    card_ids = sorted([payload.sender_card_id, payload.receiver_card_id])
+    query = select(CardModel).where(CardModel.id.in_(card_ids)).with_for_update()
+    result = await db.execute(query)
+    cards = result.scalars().all()
+    sender_card = next(
+        (c for c in cards if c.id == payload.sender_card_id), None
+    )
+    fee = Decimal("1.02")
+    if not sender_card:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Sender card not found")
+    if sender_card.owner_id != current_user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Card is not yours")
+    if sender_card.balance < payload.sent + fee:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Insufficient balance")
+    receiver_card = next(
+        (c for c in cards if c.id == payload.receiver_card_id),
+        None
+    )
+    if not receiver_card:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Receiver card not found")
+    sent = payload.sent
+    received, rate = calculate_exchanged(
+        sender_currency=sender_card.currency,
+        receiver_currency=receiver_card.currency,
+        amount=sent,
+    )
+
+    transaction = TransactionModel(
+        sender_id=sender_card.id,
+        receiver_id=receiver_card.id,
+        sent=sent,
+        received=received,
+        fee=fee,
+        exchange_rate=rate,
+    )
+    db.add(transaction)
+    try:
+        sender_card.balance -= sent + fee
+        receiver_card.balance += received
+        transaction.status = TransactionStatus_choices.COMPLETED
+        await db.commit()
+        await db.refresh(transaction)
+        return transaction
+    except Exception:
+       await db.rollback()
+       raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail="Transaction failed"
+        ) 
+        

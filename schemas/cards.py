@@ -18,6 +18,7 @@ class CardResponseSchema(BaseModel):
     balance: Decimal
     name: str | None = None
     favorite: bool
+    created_at: datetime
     expiration_date: datetime
 
     @computed_field
