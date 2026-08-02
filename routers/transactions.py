@@ -106,20 +106,24 @@ async def transfer(
         )
 
 
-@router.get("/get-transactions", response_model=list[TransactionResponseSchema], status_code=status.HTTP_200_OK)
+@router.get(
+    "/get-transactions",
+    response_model=list[TransactionResponseSchema],
+    status_code=status.HTTP_200_OK,
+)
 async def get_transactions(
+    limit: int = 20,
+    offset: int = 0,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
 ):
     cards_query = select(CardModel.id).where(CardModel.owner_id == current_user.id)
-    result = await db.execute(cards_query)
-    cards = result.scalars().all()
     query = select(TransactionModel).where(
         or_(
-            TransactionModel.sender_id.in_(cards),
-            TransactionModel.receiver_id.in_(cards),
+            TransactionModel.sender_id.in_(cards_query),
+            TransactionModel.receiver_id.in_(cards_query),
         )
-    )
+    ).order_by(TransactionModel.created_at.desc()).limit(limit).offset(offset)
     result = await db.execute(query)
     transactions = result.scalars().all()
     return transactions
