@@ -13,3 +13,5 @@ wheels/
 # DB
 migrations
 alembic.ini
+.env
+.dockerignore
