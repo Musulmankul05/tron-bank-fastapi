@@ -4,7 +4,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.testing.pickleable import User
+from sqlalchemy.orm import joinedload
 
 from database import get_session
 from models import UserModel
@@ -12,7 +12,7 @@ from models.cards import CardModel, Currencies_choice
 from models.transactions import TransactionModel, TransactionStatus_choices
 from schemas.transactions import TransactionCreateSchema, TransactionResponseSchema
 from utils.dependencies import get_current_user
-from utils.security import encrypt_data
+from utils.security import decrypt_data, encrypt_data
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -106,20 +106,64 @@ async def transfer(
         )
 
 
-@router.get("/get-transactions", response_model=list[TransactionResponseSchema], status_code=status.HTTP_200_OK)
+@router.get(
+    "/get-transactions",
+    response_model=list[TransactionResponseSchema],
+    status_code=status.HTTP_200_OK,
+)
 async def get_transactions(
+    limit: int = 20,
+    offset: int = 0,
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
 ):
     cards_query = select(CardModel.id).where(CardModel.owner_id == current_user.id)
-    result = await db.execute(cards_query)
-    cards = result.scalars().all()
-    query = select(TransactionModel).where(
-        or_(
-            TransactionModel.sender_id.in_(cards),
-            TransactionModel.receiver_id.in_(cards),
+    query = (
+        select(TransactionModel)
+        .where(
+            or_(
+                TransactionModel.sender_id.in_(cards_query),
+                TransactionModel.receiver_id.in_(cards_query),
+            )
         )
+        .order_by(TransactionModel.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
     result = await db.execute(query)
     transactions = result.scalars().all()
     return transactions
+
+
+@router.get("/transactions/{tx_id}")
+async def transaction(
+    tx_id: int,
+    db: AsyncSession = Depends(get_session),
+    current_user: UserModel = Depends(get_current_user),
+):
+    query = (
+        select(TransactionModel)
+        .where(TransactionModel.id == tx_id)
+        .options(
+            joinedload(TransactionModel.sender), joinedload(TransactionModel.receiver)
+        )
+    )
+    result = await db.execute(query)
+    tx = result.scalar_one_or_none()
+    if not tx:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Transaction not found")
+    if (
+        tx.sender.owner_id != current_user.id
+        and tx.receiver.owner_id != current_user.id
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Wrong transaction page")
+    decrypted_tx: dict = decrypt_data(tx.encryption)
+    return {
+        "id": tx.id,
+        "status": tx.status,
+        "sent": tx.sent,
+        "received": tx.received,
+        "fee": tx.fee,
+        "created_at": tx.created_at,
+        "payload": decrypted_tx
+    }
