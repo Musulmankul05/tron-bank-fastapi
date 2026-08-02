@@ -21,9 +21,9 @@ class TransactionModel(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     sender_id: Mapped[int] = mapped_column(ForeignKey("cards.id", ondelete="CASCADE"))
-    sender: Mapped["CardModel"] = relationship(back_populates="sent")
+    sender: Mapped["CardModel"] = relationship(back_populates="sent", foreign_keys=[sender_id])
     receiver_id: Mapped[int] = mapped_column(ForeignKey("cards.id", ondelete="CASCADE"))
-    receiver: Mapped["CardModel"] = relationship(back_populates="received")
+    receiver: Mapped["CardModel"] = relationship(back_populates="received", foreign_keys=[receiver_id])
 
     sent: Mapped[Decimal] = mapped_column(Numeric(precision=12, scale=2))
     received: Mapped[Decimal] = mapped_column(Numeric(precision=12, scale=2))

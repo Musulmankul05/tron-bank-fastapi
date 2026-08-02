@@ -67,14 +67,13 @@ async def login_user(
         conditions.append(UserModel.username == creds.username)
     if creds.phone:
         conditions.append(UserModel.phone == creds.phone)
-    print(f"phone: {creds.phone}\nusername: {creds.username}")
     if not conditions:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, detail="Enter username or phone"
         )
     query = select(UserModel).where(or_(*conditions))
     result = await db.execute(query)
-    user = result.scalar_one_or_none()
+    user = result.scalars().first()
     if user is not None and verify_password(creds.password, user.hashed_password):
         token = auth.create_access_token(uid=str(user.id))
         response.set_cookie("auth_access_token", token)

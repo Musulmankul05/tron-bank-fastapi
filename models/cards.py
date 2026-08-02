@@ -37,3 +37,9 @@ class CardModel(Base):
     expiration_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=default_expiration_date
     )
+    sent: Mapped[list["TransactionModel"]] = relationship(
+        back_populates="sender", foreign_keys="TransactionModel.sender_id"
+    )
+    received: Mapped[list["TransactionModel"]] = relationship(
+        back_populates="receiver", foreign_keys="TransactionModel.receiver_id"
+    )

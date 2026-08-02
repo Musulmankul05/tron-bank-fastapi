@@ -1,10 +1,10 @@
+from datetime import datetime
 from decimal import Decimal
-from logging import raiseExceptions
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session
+from sqlalchemy.testing.pickleable import User
 
 from database import get_session
 from models import UserModel
@@ -12,6 +12,7 @@ from models.cards import CardModel, Currencies_choice
 from models.transactions import TransactionModel, TransactionStatus_choices
 from schemas.transactions import TransactionCreateSchema, TransactionResponseSchema
 from utils.dependencies import get_current_user
+from utils.security import encrypt_data
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -53,20 +54,15 @@ async def transfer(
     query = select(CardModel).where(CardModel.id.in_(card_ids)).with_for_update()
     result = await db.execute(query)
     cards = result.scalars().all()
-    sender_card = next(
-        (c for c in cards if c.id == payload.sender_card_id), None
-    )
+    sender_card = next((c for c in cards if c.id == payload.sender_card_id), None)
     fee = Decimal("1.02")
     if not sender_card:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Sender card not found")
     if sender_card.owner_id != current_user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Card is not yours")
-    if sender_card.balance < payload.sent + fee:
+    if sender_card.balance < payload.sent * fee:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Insufficient balance")
-    receiver_card = next(
-        (c for c in cards if c.id == payload.receiver_card_id),
-        None
-    )
+    receiver_card = next((c for c in cards if c.id == payload.receiver_card_id), None)
     if not receiver_card:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Receiver card not found")
     sent = payload.sent
@@ -76,26 +72,54 @@ async def transfer(
         amount=sent,
     )
 
+    payload_to_encrypt = {
+        "sender_id": sender_card.id,
+        "receiver_id": receiver_card.id,
+        "amount": str(sent),
+        "timestamp": str(datetime.now()),
+    }
+
     transaction = TransactionModel(
         sender_id=sender_card.id,
         receiver_id=receiver_card.id,
-        sent=sent,
+        sent=sent * fee,
         received=received,
         fee=fee,
         exchange_rate=rate,
+        encryption=encrypt_data(payload_to_encrypt),
     )
     db.add(transaction)
+    await db.commit()
+    print(transaction.status)
     try:
-        sender_card.balance -= sent + fee
+        sender_card.balance -= sent * fee
         receiver_card.balance += received
         transaction.status = TransactionStatus_choices.COMPLETED
         await db.commit()
         await db.refresh(transaction)
         return transaction
     except Exception:
-       await db.rollback()
-       raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-            detail="Transaction failed"
-        ) 
-        
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Transaction failed",
+        )
+
+
+@router.get("/get-transactions", response_model=list[TransactionResponseSchema], status_code=status.HTTP_200_OK)
+async def get_transactions(
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+):
+    cards_query = select(CardModel.id).where(CardModel.owner_id == current_user.id)
+    result = await db.execute(cards_query)
+    cards = result.scalars().all()
+    query = select(TransactionModel).where(
+        or_(
+            TransactionModel.sender_id.in_(cards),
+            TransactionModel.receiver_id.in_(cards),
+        )
+    )
+    result = await db.execute(query)
+    transactions = result.scalars().all()
+    return transactions
