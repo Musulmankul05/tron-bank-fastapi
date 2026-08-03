@@ -142,7 +142,7 @@ async def kyc_verification(
             signature=payload.signature,
         )
         db.add(kyc)
-        current_user.kyc_status = KYCStatus_choice.VERIFIED
+        current_user.kyc_status = KYCStatus_choice.PENDING
         await db.commit()
         await db.refresh(kyc)
         return kyc
