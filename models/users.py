@@ -64,6 +64,7 @@ class KYCModel(Base):
     )
     user: Mapped["UserModel"] = relationship(back_populates="kyc")
     inn: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    passport_id: Mapped[str | None] = mapped_column(String, nullable=True)
     account_type: Mapped[AccountType_choice] = mapped_column(
         Enum(AccountType_choice), default=AccountType_choice.PRIVATE
     )

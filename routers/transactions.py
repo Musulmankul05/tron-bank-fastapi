@@ -10,6 +10,7 @@ from database import get_session
 from models import UserModel
 from models.cards import CardModel, Currencies_choice
 from models.transactions import TransactionModel, TransactionStatus_choices
+from models.users import KYCStatus_choice
 from schemas.transactions import TransactionCreateSchema, TransactionResponseSchema
 from utils.dependencies import get_current_user
 from utils.security import decrypt_data, encrypt_data
@@ -48,6 +49,10 @@ async def transfer(
     db: AsyncSession = Depends(get_session),
     current_user: UserModel = Depends(get_current_user),
 ):
+    if current_user.kyc_status != KYCStatus_choice.VERIFIED:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Your account is not verified"
+        )
     if payload.sender_card_id == payload.receiver_card_id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Wrong Card")
     card_ids = sorted([payload.sender_card_id, payload.receiver_card_id])
@@ -90,7 +95,6 @@ async def transfer(
     )
     db.add(transaction)
     await db.commit()
-    print(transaction.status)
     try:
         sender_card.balance -= sent * fee
         receiver_card.balance += received
@@ -117,6 +121,10 @@ async def get_transactions(
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
 ):
+    if current_user.kyc_status != KYCStatus_choice.VERIFIED:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Your account is not verified"
+        )
     cards_query = select(CardModel.id).where(CardModel.owner_id == current_user.id)
     query = (
         select(TransactionModel)
@@ -141,6 +149,10 @@ async def transaction(
     db: AsyncSession = Depends(get_session),
     current_user: UserModel = Depends(get_current_user),
 ):
+    if current_user.kyc_status != KYCStatus_choice.VERIFIED:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Your account is not verified"
+        )
     query = (
         select(TransactionModel)
         .where(TransactionModel.id == tx_id)
@@ -165,5 +177,5 @@ async def transaction(
         "received": tx.received,
         "fee": tx.fee,
         "created_at": tx.created_at,
-        "payload": decrypted_tx
+        "payload": decrypted_tx,
     }

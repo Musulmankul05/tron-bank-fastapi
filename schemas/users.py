@@ -1,6 +1,8 @@
 from datetime import date
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
+
+from models.users import AccountType_choice
 
 
 class UserCreateSchema(BaseModel):
@@ -36,3 +38,10 @@ class UserLoginSchema(BaseModel):
 class TokenSchema(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class KYCSchema(BaseModel):
+    inn: int | None = Field(le=14)
+    account_type: AccountType_choice
+    passport_id: str | None
+    signature: str | None

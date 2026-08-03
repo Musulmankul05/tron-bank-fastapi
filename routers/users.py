@@ -5,8 +5,10 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_session
-from models.users import UserModel
+from models import KYCModel
+from models.users import KYCStatus_choice, UserModel
 from schemas.users import (
+    KYCSchema,
     TokenSchema,
     UserCreateSchema,
     UserLoginSchema,
@@ -114,3 +116,37 @@ async def get_user_by_id(user_id: int, db: AsyncSession = Depends(get_session)):
 @router.get("/me", response_model=UserResponseSchema)
 async def get_my_profile(current_user: UserModel = Depends(get_current_user)):
     return current_user
+
+
+@router.post("/kyc-verify", response_model=KYCSchema)
+async def kyc_verification(
+    payload: KYCSchema,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+):
+    if current_user.kyc_status == KYCStatus_choice.VERIFIED:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Account already verified")
+    query = select(KYCModel).where(
+        or_(KYCModel.inn == payload.inn, KYCModel.user_id == current_user.id)
+    )
+    result = await db.execute(query)
+    existing_kyc = result.scalar_one_or_none()
+    if existing_kyc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Account already exist")
+    try:
+        kyc = KYCModel(
+            user_id=current_user.id,
+            inn=payload.inn,
+            passport_id=payload.passport_id,
+            account_type=payload.account_type,
+            signature=payload.signature,
+        )
+        db.add(kyc)
+        current_user.kyc_status = KYCStatus_choice.VERIFIED
+        await db.commit()
+        await db.refresh(kyc)
+        return kyc
+    except Exception:
+        current_user.kyc_status = KYCStatus_choice.REJECTED
+        await db.rollback()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Something went wrong")
