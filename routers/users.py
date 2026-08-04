@@ -1,5 +1,7 @@
+from datetime import timedelta
 from typing import Optional
 
+import pyotp
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +16,7 @@ from schemas.users import (
     UserLoginSchema,
     UserResponseSchema,
 )
-from utils.dependencies import get_current_user
+from utils.dependencies import get_2fa_session, get_current_user
 from utils.security import auth, hash_password, verify_password
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -76,13 +78,15 @@ async def login_user(
     query = select(UserModel).where(or_(*conditions))
     result = await db.execute(query)
     user = result.scalars().first()
-    if user is not None and verify_password(creds.password, user.hashed_password):
-        token = auth.create_access_token(uid=str(user.id))
-        response.set_cookie("auth_access_token", token)
-        return {"access_token": token}
-    raise HTTPException(
-        status.HTTP_401_UNAUTHORIZED, detail="Incorrect username/phone or password"
-    )
+    if user is None or not verify_password(creds.password, user.hashed_password):
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, detail="Incorrect username/phone or password"
+        )
+    token = auth.create_access_token(uid=str(user.id), expiry=timedelta(minutes=5))
+    response.set_cookie("temp_token", token)
+    if user.is_2fa_enabled:
+        return {"status": "2fa_required", "action": "verify"}
+    return {"status": "2fa_required", "action": "setup"}
 
 
 @router.post("/logout")
@@ -150,3 +154,55 @@ async def kyc_verification(
         current_user.kyc_status = KYCStatus_choice.REJECTED
         await db.rollback()
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Something went wrong")
+
+
+@router.post("/2fa/setup")
+async def setup_2fa(
+    user: UserModel = Depends(get_2fa_session), db: AsyncSession = Depends(get_session)
+):
+    if user.is_2fa_enabled:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Your 2FA is enabled")
+    user.totp_secret = pyotp.random_base32()
+    await db.commit()
+    await db.refresh(user)
+    totp_uri = pyotp.TOTP(user.totp_secret).provisioning_uri(
+        name=user.username, issuer_name="tron.bank"
+    )
+    return {"totp_uri": totp_uri}
+
+
+@router.post("/2fa/enable")
+async def enable_2fa(
+    code: str,
+    response: Response,
+    user: UserModel = Depends(get_2fa_session),
+    db: AsyncSession = Depends(get_session),
+):
+    if not user.totp_secret:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Setup 2FA first")
+    if pyotp.TOTP(user.totp_secret).verify(code, valid_window=1):
+        user.is_2fa_enabled = True
+        await db.commit()
+        await db.refresh(user)
+        response.delete_cookie("temp_token")
+        token = auth.create_access_token(uid=str(user.id))
+        response.set_cookie("auth_access_token", token)
+        return {"auth_access_token": token}
+    else:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Wrong TOTP code")
+
+@router.post("/2fa/verify")
+async def verify_2fa(
+    code: str,
+    response: Response,
+    user: UserModel = Depends(get_2fa_session),
+):
+    if not user.totp_secret or not user.is_2fa_enabled:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Setup 2FA first")
+    if pyotp.TOTP(user.totp_secret).verify(code, valid_window=1):
+        response.delete_cookie("temp_token")
+        token = auth.create_access_token(uid=str(user.id))
+        response.set_cookie("auth_access_token", token)
+        return {"auth_access_token": token}
+    else:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Wrong TOTP code")

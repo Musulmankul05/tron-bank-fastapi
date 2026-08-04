@@ -2,9 +2,9 @@ import json
 import os
 from datetime import timedelta
 
-from dotenv import load_dotenv
 from authx import AuthX, AuthXConfig
 from cryptography.fernet import Fernet
+from dotenv import load_dotenv
 from pwdlib import PasswordHash
 
 load_dotenv()
