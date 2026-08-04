@@ -14,7 +14,7 @@ from schemas.users import (
     UserLoginSchema,
     UserResponseSchema,
 )
-from utils.dependencies import get_current_user
+from utils.dependencies import get_current_admin, get_current_user
 from utils.security import auth, hash_password, verify_password
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -93,7 +93,9 @@ async def logout_user(response: Response):
 
 @router.get("/users", response_model=list[UserResponseSchema])
 async def get_users(
-    db: AsyncSession = Depends(get_session), username: Optional[str | None] = None
+    current_admin=Depends(get_current_admin),
+    db: AsyncSession = Depends(get_session),
+    username: Optional[str | None] = None,
 ):
     query = select(UserModel)
     if username:
@@ -103,7 +105,11 @@ async def get_users(
 
 
 @router.get("/users/{user_id}")
-async def get_user_by_id(user_id: int, db: AsyncSession = Depends(get_session)):
+async def get_user_by_id(
+    current_admin=Depends(get_current_admin),
+    user_id: int = 2,
+    db: AsyncSession = Depends(get_session),
+):
     query = select(UserModel).where(UserModel.id == user_id)
     result = await db.execute(query)
     user = result.scalar_one_or_none()
