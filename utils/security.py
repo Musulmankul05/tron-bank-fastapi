@@ -10,7 +10,7 @@ from pwdlib import PasswordHash
 load_dotenv()
 
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
-
+BACKUP_KEY = os.getenv("BACKUP_ENCRYPTION")
 config = AuthXConfig(
     JWT_SECRET_KEY=os.getenv("JWT_SECRET_KEY"),
     JWT_ALGORITHM="HS256",
@@ -24,6 +24,8 @@ auth = AuthX(config=config)
 password_hash = PasswordHash.recommended()
 
 cipher = Fernet(ENCRYPTION_KEY.encode())
+
+backup_cipher = Fernet(BACKUP_KEY.encode())
 
 
 def encrypt_data(data: dict) -> bytes:
@@ -42,3 +44,11 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return password_hash.verify(plain_password, hashed_password)
+
+
+def hash_backups(plain: str):
+    return password_hash.hash(plain)
+
+
+def verify_backups(payload: str, hashed: str) -> bool:
+    return password_hash.verify(payload, hashed)

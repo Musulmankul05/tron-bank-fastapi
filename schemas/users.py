@@ -39,9 +39,16 @@ class TokenSchema(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
+class TwoFARequiredSchema(BaseModel):
+    status: str
+    action: str
+
 
 class KYCSchema(BaseModel):
     inn: int | None = Field(le=14)
     account_type: AccountType_choice
     passport_id: str | None
     signature: str | None
+
+class BackupEnterSchema(BaseModel):
+    code: str
