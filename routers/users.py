@@ -256,6 +256,8 @@ async def reset_backups(payload: BackupEnterSchema,
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "You don't have recovery codes")
     if not verify_backups(payload.code, codes.code):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Incorrect code")
+    current_user.totp_secret = None
+    current_user.is_2fa_enabled = False
     await db.delete(codes)
     await db.commit()
     response.delete_cookie("temp_token")
