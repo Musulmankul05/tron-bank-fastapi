@@ -251,7 +251,6 @@ async def get_backups(
 
 
 @router.post("/recovery")
-@limiter.limit("5/minute")
 async def reset_backups(
     payload: BackupEnterSchema,
     response: Response,
