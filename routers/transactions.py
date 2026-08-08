@@ -4,15 +4,16 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.testing.pickleable import User
+from sqlalchemy.orm import joinedload
 
 from database import get_session
 from models import UserModel
 from models.cards import CardModel, Currencies_choice
 from models.transactions import TransactionModel, TransactionStatus_choices
+from models.users import KYCStatus_choice
 from schemas.transactions import TransactionCreateSchema, TransactionResponseSchema
 from utils.dependencies import get_current_user
-from utils.security import encrypt_data
+from utils.security import decrypt_data, encrypt_data
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -48,6 +49,10 @@ async def transfer(
     db: AsyncSession = Depends(get_session),
     current_user: UserModel = Depends(get_current_user),
 ):
+    if current_user.kyc_status != KYCStatus_choice.VERIFIED:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Your account is not verified"
+        )
     if payload.sender_card_id == payload.receiver_card_id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Wrong Card")
     card_ids = sorted([payload.sender_card_id, payload.receiver_card_id])
@@ -90,7 +95,6 @@ async def transfer(
     )
     db.add(transaction)
     await db.commit()
-    print(transaction.status)
     try:
         sender_card.balance -= sent * fee
         receiver_card.balance += received
@@ -117,6 +121,7 @@ async def get_transactions(
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
 ):
+<<<<<<< HEAD
     cards_query = select(CardModel.id).where(CardModel.owner_id == current_user.id)
     query = select(TransactionModel).where(
         or_(
@@ -127,3 +132,63 @@ async def get_transactions(
     result = await db.execute(query)
     transactions = result.scalars().all()
     return transactions
+=======
+    if current_user.kyc_status != KYCStatus_choice.VERIFIED:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Your account is not verified"
+        )
+    cards_query = select(CardModel.id).where(CardModel.owner_id == current_user.id)
+    query = (
+        select(TransactionModel)
+        .where(
+            or_(
+                TransactionModel.sender_id.in_(cards_query),
+                TransactionModel.receiver_id.in_(cards_query),
+            )
+        )
+        .order_by(TransactionModel.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    result = await db.execute(query)
+    transactions = result.scalars().all()
+    return transactions
+
+
+@router.get("/transactions/{tx_id}")
+async def transaction(
+    tx_id: int,
+    db: AsyncSession = Depends(get_session),
+    current_user: UserModel = Depends(get_current_user),
+):
+    if current_user.kyc_status != KYCStatus_choice.VERIFIED:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Your account is not verified"
+        )
+    query = (
+        select(TransactionModel)
+        .where(TransactionModel.id == tx_id)
+        .options(
+            joinedload(TransactionModel.sender), joinedload(TransactionModel.receiver)
+        )
+    )
+    result = await db.execute(query)
+    tx = result.scalar_one_or_none()
+    if not tx:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Transaction not found")
+    if (
+        tx.sender.owner_id != current_user.id
+        and tx.receiver.owner_id != current_user.id
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Wrong transaction page")
+    decrypted_tx: dict = decrypt_data(tx.encryption)
+    return {
+        "id": tx.id,
+        "status": tx.status,
+        "sent": tx.sent,
+        "received": tx.received,
+        "fee": tx.fee,
+        "created_at": tx.created_at,
+        "payload": decrypted_tx,
+    }
+>>>>>>> api/2fa

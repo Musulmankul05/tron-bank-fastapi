@@ -1,11 +1,11 @@
 import jwt
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Cookie, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_session
 from models.users import UserModel
-from utils.security import config
+from utils.security import auth, config
 
 
 async def get_current_user(
@@ -42,4 +42,26 @@ async def get_current_user(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
 
+    return user
+
+
+async def get_2fa_session(
+    temp_token: str | None = Cookie(None), db: AsyncSession = Depends(get_session)
+):
+    if not temp_token:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong or empty token")
+    try:
+        payload = jwt.decode(
+            temp_token, config.JWT_SECRET_KEY, algorithms=[config.JWT_ALGORITHM]
+        )
+        user_id = payload.get("sub")
+
+    except Exception:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token")
+
+    query = select(UserModel).where(UserModel.id == user_id)
+    result = await db.execute(query)
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
     return user

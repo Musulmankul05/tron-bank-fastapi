@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_session
 from models import UserModel
 from models.cards import CardModel, Currencies_choice
+from models.users import KYCStatus_choice
 from schemas.cards import CardCreateSchema, CardResponseSchema
 from utils.dependencies import get_current_user
 
@@ -19,6 +20,10 @@ async def new_card(
     db: AsyncSession = Depends(get_session),
     current_user: UserModel = Depends(get_current_user),
 ):
+    if current_user.kyc_status != KYCStatus_choice.VERIFIED:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Your account is not verified"
+        )
     count_query = select(func.count(CardModel.id)).where(
         CardModel.owner_id == current_user.id, CardModel.currency == payload.currency
     )
@@ -56,6 +61,10 @@ async def get_my_cards(
     db: AsyncSession = Depends(get_session),
     current_user: UserModel = Depends(get_current_user),
 ):
+    if current_user.kyc_status != KYCStatus_choice.VERIFIED:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Your account is not verified"
+        )
     query = select(CardModel).where(CardModel.owner_id == current_user.id)
     result = await db.execute(query)
     card = result.scalars().all()
