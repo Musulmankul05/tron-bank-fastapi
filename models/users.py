@@ -32,7 +32,7 @@ class UserModel(Base):
     date_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
     phone: Mapped[str] = mapped_column(String(24), unique=True)
     is_phone_verified: Mapped[bool] = mapped_column(Boolean, default=False)
-    is_2fa_enabled: Mapped[bool | None] = mapped_column(Boolean, default=False, nullable=True)
+    is_2fa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=True)
     totp_secret: Mapped[str | None] = mapped_column(String(32), nullable=True)
     country: Mapped[str | None] = mapped_column(String(30), nullable=True)
     

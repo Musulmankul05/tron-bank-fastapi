@@ -23,8 +23,14 @@ from schemas.users import (
 from utils.dependencies import get_2fa_session, get_current_user
 from utils.security import (
     auth,
+    check_attempt,
     hash_backups,
     hash_password,
+<<<<<<< HEAD
+=======
+    register_failure,
+    reset_attempts,
+>>>>>>> api/rate-limit
     verify_backups,
     verify_password,
 )
@@ -192,17 +198,20 @@ async def enable_2fa(
     user: UserModel = Depends(get_2fa_session),
     db: AsyncSession = Depends(get_session),
 ):
+    await check_attempt(user.id)
     if not user.totp_secret:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Setup 2FA first")
     if pyotp.TOTP(user.totp_secret).verify(code, valid_window=1):
         user.is_2fa_enabled = True
         await db.commit()
+        await reset_attempts(user.id)
         await db.refresh(user)
         response.delete_cookie("temp_token")
         token = auth.create_access_token(uid=str(user.id))
         response.set_cookie("auth_access_token", token)
         return {"auth_access_token": token}
     else:
+        await register_failure(user.id)
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Wrong TOTP code")
 
 
@@ -212,14 +221,17 @@ async def verify_2fa(
     response: Response,
     user: UserModel = Depends(get_2fa_session),
 ):
+    await check_attempt(user.id)
     if not user.totp_secret or not user.is_2fa_enabled:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Setup 2FA first")
     if pyotp.TOTP(user.totp_secret).verify(code, valid_window=1):
+        await reset_attempts(user.id)
         response.delete_cookie("temp_token")
         token = auth.create_access_token(uid=str(user.id))
         response.set_cookie("auth_access_token", token)
         return {"auth_access_token": token}
     else:
+        await register_failure(user.id)
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Wrong TOTP code")
 
 
@@ -257,6 +269,7 @@ async def reset_backups(
     current_user: UserModel = Depends(get_2fa_session),
     db: AsyncSession = Depends(get_session),
 ):
+    await check_attempt(current_user.id)
     query = select(BackupCodesModel).where(BackupCodesModel.user_id == current_user.id)
     result = await db.execute(query)
     codes = result.scalar_one_or_none()
@@ -265,7 +278,11 @@ async def reset_backups(
             status.HTTP_400_BAD_REQUEST, "You don't have recovery codes"
         )
     if not verify_backups(payload.code, codes.code):
+        await register_failure(current_user.id)
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Incorrect code")
+    await reset_attempts(current_user.id)
+    current_user.totp_secret = None
+    current_user.is_2fa_enabled = False
     await db.delete(codes)
     await db.commit()
     response.delete_cookie("temp_token")
