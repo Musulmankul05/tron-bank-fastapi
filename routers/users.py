@@ -1,3 +1,6 @@
+import random
+import secrets
+import string
 from datetime import timedelta
 from typing import Optional
 
@@ -7,17 +10,23 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_session
-from models import KYCModel
+from models import BackupCodesModel, KYCModel
 from models.users import KYCStatus_choice, UserModel
 from schemas.users import (
     KYCSchema,
     TokenSchema,
     UserCreateSchema,
     UserLoginSchema,
-    UserResponseSchema,
+    UserResponseSchema, BackupEnterSchema, TwoFARequiredSchema,
 )
 from utils.dependencies import get_2fa_session, get_current_user
-from utils.security import auth, hash_password, verify_password
+from utils.security import (
+    auth,
+    hash_backups,
+    verify_backups,
+    hash_password,
+    verify_password,
+)
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -62,7 +71,7 @@ async def register_user(
     return new_user
 
 
-@router.post("/login", response_model=TokenSchema, status_code=status.HTTP_200_OK)
+@router.post("/login", response_model=TokenSchema | TwoFARequiredSchema, status_code=status.HTTP_200_OK)
 async def login_user(
     response: Response, creds: UserLoginSchema, db: AsyncSession = Depends(get_session)
 ):
@@ -191,6 +200,7 @@ async def enable_2fa(
     else:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Wrong TOTP code")
 
+
 @router.post("/2fa/verify")
 async def verify_2fa(
     code: str,
@@ -206,3 +216,49 @@ async def verify_2fa(
         return {"auth_access_token": token}
     else:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Wrong TOTP code")
+
+
+@router.get("/recovery/get")
+async def get_backups(
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+):
+    query = select(BackupCodesModel).where(BackupCodesModel.user_id == current_user.id)
+    result = await db.execute(query)
+    existing_code = result.scalar_one_or_none()
+    if existing_code:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "You already have recovery codes"
+        )
+    plain_codes_list = []
+    for _ in range(4):
+        random_string = "".join(secrets.choice(string.ascii_letters.lower()) for _ in range(4))
+        plain_codes_list.append(random_string)
+    plain_codes = "-".join(i for i in plain_codes_list)
+    codes = BackupCodesModel(user_id=current_user.id, code=hash_backups(plain_codes))
+    db.add(codes)
+    await db.commit()
+    await db.refresh(codes)
+    plain_dict = {i: j for i, j in enumerate(plain_codes_list, 1)}
+    return plain_dict
+
+
+@router.post("/recovery")
+async def reset_backups(payload: BackupEnterSchema,
+    response: Response,
+    current_user: UserModel = Depends(get_2fa_session),
+    db: AsyncSession = Depends(get_session),
+):
+    query = select(BackupCodesModel).where(BackupCodesModel.user_id == current_user.id)
+    result = await db.execute(query)
+    codes = result.scalar_one_or_none()
+    if not codes:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "You don't have recovery codes")
+    if not verify_backups(payload.code, codes.code):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Incorrect code")
+    await db.delete(codes)
+    await db.commit()
+    response.delete_cookie("temp_token")
+    token = auth.create_access_token(uid=str(current_user.id))
+    response.set_cookie("auth_access_token", token)
+    return {"message": "Backup code is deleted. You can set a new", "auth_access_token": token}

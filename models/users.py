@@ -37,9 +37,8 @@ class UserModel(Base):
     country: Mapped[str | None] = mapped_column(String(30), nullable=True)
     
     cards: Mapped[list["CardModel"]] = relationship(back_populates="owner")
-    backups: Mapped[list["BackupCodesModel"]] = relationship(back_populates="user_backups")
+    backups: Mapped["BackupCodesModel"] = relationship(back_populates="user_backups")
     kyc: Mapped["KYCModel"] = relationship(back_populates="user")
-    
 
 
 class BackupCodesModel(Base):

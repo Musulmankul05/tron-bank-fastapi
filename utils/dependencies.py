@@ -1,5 +1,5 @@
 import jwt
-from fastapi import Cookie, Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,9 +45,9 @@ async def get_current_user(
     return user
 
 
-async def get_2fa_session(
-    temp_token: str | None = Cookie(None), db: AsyncSession = Depends(get_session)
+async def get_2fa_session(request: Request, db: AsyncSession = Depends(get_session)
 ):
+    temp_token = request.cookies.get("temp_token")
     if not temp_token:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong or empty token")
     try:
@@ -55,6 +55,9 @@ async def get_2fa_session(
             temp_token, config.JWT_SECRET_KEY, algorithms=[config.JWT_ALGORITHM]
         )
         user_id = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token payload")
+        user_id = int(user_id)
 
     except Exception:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token")
