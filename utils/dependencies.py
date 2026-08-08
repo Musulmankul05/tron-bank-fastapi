@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_session
 from models.users import UserModel
-from utils.security import auth, config
+from utils.security import config
 
 
 async def get_current_user(
