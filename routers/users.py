@@ -1,4 +1,3 @@
-import random
 import secrets
 import string
 from datetime import timedelta
@@ -13,18 +12,20 @@ from database import get_session
 from models import BackupCodesModel, KYCModel
 from models.users import KYCStatus_choice, UserModel
 from schemas.users import (
+    BackupEnterSchema,
     KYCSchema,
     TokenSchema,
+    TwoFARequiredSchema,
     UserCreateSchema,
     UserLoginSchema,
-    UserResponseSchema, BackupEnterSchema, TwoFARequiredSchema,
+    UserResponseSchema,
 )
 from utils.dependencies import get_2fa_session, get_current_user
 from utils.security import (
     auth,
     hash_backups,
-    verify_backups,
     hash_password,
+    verify_backups,
     verify_password,
 )
 
@@ -71,7 +72,11 @@ async def register_user(
     return new_user
 
 
-@router.post("/login", response_model=TokenSchema | TwoFARequiredSchema, status_code=status.HTTP_200_OK)
+@router.post(
+    "/login",
+    response_model=TokenSchema | TwoFARequiredSchema,
+    status_code=status.HTTP_200_OK,
+)
 async def login_user(
     response: Response, creds: UserLoginSchema, db: AsyncSession = Depends(get_session)
 ):
@@ -232,7 +237,9 @@ async def get_backups(
         )
     plain_codes_list = []
     for _ in range(4):
-        random_string = "".join(secrets.choice(string.ascii_letters.lower()) for _ in range(4))
+        random_string = "".join(
+            secrets.choice(string.ascii_letters.lower()) for _ in range(4)
+        )
         plain_codes_list.append(random_string)
     plain_codes = "-".join(i for i in plain_codes_list)
     codes = BackupCodesModel(user_id=current_user.id, code=hash_backups(plain_codes))
@@ -244,7 +251,9 @@ async def get_backups(
 
 
 @router.post("/recovery")
-async def reset_backups(payload: BackupEnterSchema,
+@limiter.limit("5/minute")
+async def reset_backups(
+    payload: BackupEnterSchema,
     response: Response,
     current_user: UserModel = Depends(get_2fa_session),
     db: AsyncSession = Depends(get_session),
@@ -253,7 +262,9 @@ async def reset_backups(payload: BackupEnterSchema,
     result = await db.execute(query)
     codes = result.scalar_one_or_none()
     if not codes:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "You don't have recovery codes")
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "You don't have recovery codes"
+        )
     if not verify_backups(payload.code, codes.code):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Incorrect code")
     current_user.totp_secret = None
@@ -263,4 +274,7 @@ async def reset_backups(payload: BackupEnterSchema,
     response.delete_cookie("temp_token")
     token = auth.create_access_token(uid=str(current_user.id))
     response.set_cookie("auth_access_token", token)
-    return {"message": "Backup code is deleted. You can set a new", "auth_access_token": token}
+    return {
+        "message": "Backup code is deleted. You can set a new",
+        "auth_access_token": token,
+    }
