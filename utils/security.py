@@ -1,4 +1,3 @@
-from fastapi import HTTPException, status
 import json
 import os
 from datetime import timedelta
@@ -6,6 +5,7 @@ from datetime import timedelta
 from authx import AuthX, AuthXConfig
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
+from fastapi import HTTPException, status
 from pwdlib import PasswordHash
 
 from .redis import redis_client
@@ -56,12 +56,17 @@ def hash_backups(plain: str):
 def verify_backups(payload: str, hashed: str) -> bool:
     return password_hash.verify(payload, hashed)
 
+
 async def check_attempt(user_id):
     key = f"failed_2fa: {user_id}"
     attempts = await redis_client.get(key)
 
     if attempts and int(attempts) >= 5:
-        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Too many failed attempts. Try again in 20 minutes")
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "Too many failed attempts. Try again in 20 minutes",
+        )
+
 
 async def register_failure(user_id):
     key = f"failed_2fa: {user_id}"
@@ -69,6 +74,7 @@ async def register_failure(user_id):
 
     if attempts == 5:
         await redis_client.expire(key, 900)
+
 
 async def reset_attempts(user_id):
     key = f"failed_2fa: {user_id}"

@@ -14,6 +14,7 @@ from models.users import KYCStatus_choice, UserModel
 from schemas.users import (
     BackupEnterSchema,
     KYCSchema,
+    NewPasswordSchema,
     TokenSchema,
     TwoFARequiredSchema,
     UserCreateSchema,
@@ -289,3 +290,17 @@ async def reset_backups(
         "message": "Backup code is deleted. You can set a new",
         "auth_access_token": token,
     }
+
+
+@router.post("/change-password", response_model=UserResponseSchema)
+async def change_password(
+    payload: NewPasswordSchema,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+):
+    if not verify_password(payload.old_pass, current_user.hashed_password):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Incorrect old password")
+    current_user.hashed_password = hash_password(payload.confirm_pass)
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
