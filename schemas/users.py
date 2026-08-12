@@ -1,6 +1,7 @@
+from database import Base
 from datetime import date
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 from models.users import AccountType_choice
 
@@ -52,3 +53,16 @@ class KYCSchema(BaseModel):
 
 class BackupEnterSchema(BaseModel):
     code: str
+
+class ResetPasswordSchema(BaseModel):
+    username: str
+    code: str
+    new_pass: str = Field(min_length=7)
+    confirm_pass: str = Field(min_length=7)
+
+    @model_validator(mode="after")
+    def check_password(self):
+        if self.new_pass != self.confirm_pass:
+            raise ValueError("Passwords do not match")
+        return self
+    

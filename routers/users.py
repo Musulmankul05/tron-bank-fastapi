@@ -17,7 +17,7 @@ from schemas.users import (
     TokenSchema,
     UserCreateSchema,
     UserLoginSchema,
-    UserResponseSchema, BackupEnterSchema, TwoFARequiredSchema,
+    UserResponseSchema, BackupEnterSchema, TwoFARequiredSchema, ResetPasswordSchema,
 )
 from utils.dependencies import get_2fa_session, get_current_user
 from utils.security import (
@@ -264,3 +264,25 @@ async def reset_backups(payload: BackupEnterSchema,
     token = auth.create_access_token(uid=str(current_user.id))
     response.set_cookie("auth_access_token", token)
     return {"message": "Backup code is deleted. You can set a new", "auth_access_token": token}
+
+
+@router.post("/reset-password", response_model=UserResponseSchema)
+async def reset_password(payload: ResetPasswordSchema, db: AsyncSession = Depends(get_session)):
+    query = select(UserModel).where(UserModel.username == payload.username)
+    result = await db.execute(query)
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "User does not exist")
+    code_query = select(BackupCodesModel).where(BackupCodesModel.user_id == user.id)
+    code_res = await db.execute(code_query)
+    code = code_res.scalar_one_or_none()
+    if not code: raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid request")
+    if not verify_backups(payload.code, code.code):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Incorrect code")
+    user.totp_secret = None
+    user.is_2fa_enabled = False
+    user.hashed_password = hash_password(payload.confirm_pass)
+    await db.delete(code)
+    await db.commit()
+    await db.refresh(user)
+    return user
