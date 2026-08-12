@@ -35,6 +35,7 @@ class UserModel(Base):
     is_2fa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=True)
     totp_secret: Mapped[str | None] = mapped_column(String(32), nullable=True)
     country: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
     
     cards: Mapped[list["CardModel"]] = relationship(back_populates="owner")
     backups: Mapped["BackupCodesModel"] = relationship(back_populates="user_backups")

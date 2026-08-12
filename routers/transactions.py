@@ -94,7 +94,6 @@ async def transfer(
         encryption=encrypt_data(payload_to_encrypt),
     )
     db.add(transaction)
-    await db.commit()
     try:
         sender_card.balance -= sent * fee
         receiver_card.balance += received
@@ -121,7 +120,6 @@ async def get_transactions(
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
 ):
-<<<<<<< HEAD
     if current_user.kyc_status != KYCStatus_choice.VERIFIED:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, "Your account is not verified"
@@ -180,15 +178,3 @@ async def transaction(
         "created_at": tx.created_at,
         "payload": decrypted_tx,
     }
-=======
-    cards_query = select(CardModel.id).where(CardModel.owner_id == current_user.id)
-    query = select(TransactionModel).where(
-        or_(
-            TransactionModel.sender_id.in_(cards_query),
-            TransactionModel.receiver_id.in_(cards_query),
-        )
-    ).order_by(TransactionModel.created_at.desc()).limit(limit).offset(offset)
-    result = await db.execute(query)
-    transactions = result.scalars().all()
-    return transactions
->>>>>>> f77066a (transaction API)

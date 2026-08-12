@@ -58,7 +58,7 @@ def verify_backups(payload: str, hashed: str) -> bool:
 
 
 async def check_attempt(user_id):
-    key = f"failed_2fa: {user_id}"
+    key = f"failed_2fa:{user_id}"
     attempts = await redis_client.get(key)
 
     if attempts and int(attempts) >= 5:
@@ -69,13 +69,13 @@ async def check_attempt(user_id):
 
 
 async def register_failure(user_id):
-    key = f"failed_2fa: {user_id}"
+    key = f"failed_2fa:{user_id}"
     attempts = await redis_client.incr(key)
 
-    if attempts == 5:
+    if attempts == 1:
         await redis_client.expire(key, 900)
 
 
 async def reset_attempts(user_id):
-    key = f"failed_2fa: {user_id}"
+    key = f"failed_2fa:{user_id}"
     await redis_client.delete(key)
