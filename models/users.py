@@ -26,8 +26,7 @@ class UserModel(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     kyc_status: Mapped[KYCStatus_choice] = mapped_column(
         Enum(KYCStatus_choice, name="kycstatus"),
-        default=KYCStatus_choice.UNVERIFIED,
-        nullable=False,
+        default=KYCStatus_choice.UNVERIFIED
     )
     date_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
     phone: Mapped[str] = mapped_column(String(24), unique=True)
@@ -35,7 +34,7 @@ class UserModel(Base):
     is_2fa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=True)
     totp_secret: Mapped[str | None] = mapped_column(String(32), nullable=True)
     country: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_superuser: Mapped[bool | None] = mapped_column(Boolean, default=False, nullable=True)
     
     cards: Mapped[list["CardModel"]] = relationship(back_populates="owner")
     backups: Mapped["BackupCodesModel"] = relationship(back_populates="user_backups")

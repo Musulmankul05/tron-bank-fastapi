@@ -5,7 +5,7 @@ from datetime import timedelta
 from authx import AuthX, AuthXConfig
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Request, status
 from pwdlib import PasswordHash
 
 from .redis import redis_client
@@ -27,9 +27,6 @@ auth = AuthX(config=config)
 password_hash = PasswordHash.recommended()
 
 cipher = Fernet(ENCRYPTION_KEY.encode())
-
-backup_cipher = Fernet(BACKUP_KEY.encode())
-
 
 def encrypt_data(data: dict) -> bytes:
     json_bytes = json.dumps(data).encode("utf-8")
@@ -55,6 +52,13 @@ def hash_backups(plain: str):
 
 def verify_backups(payload: str, hashed: str) -> bool:
     return password_hash.verify(payload, hashed)
+
+
+def get_client_ip(request: Request):
+    x_forwarded_for = request.headers.get("x-forwarded-for")
+    if x_forwarded_for:
+        return x_forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
 
 async def check_attempt(user_id):

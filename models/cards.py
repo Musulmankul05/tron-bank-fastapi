@@ -20,6 +20,17 @@ def default_expiration_date() -> datetime:
 
 
 class CardModel(Base):
+    """
+    # Fields::
+    id: Mapped[int]
+    owner_id: Mapped[int]
+    currency: Mapped[Currencies_choice]
+    name: Mapped[str | None]
+    balance: Mapped[Decimal]
+    favorite: Mapped[bool]
+    created_at: Mapped[datetime]
+    expiration_date: Mapped[datetime]
+    """
     __tablename__ = "cards"
 
     id: Mapped[int] = mapped_column(primary_key=True)
