@@ -15,3 +15,4 @@ migrations
 alembic.ini
 .env
 .dockerignore
+*.xml

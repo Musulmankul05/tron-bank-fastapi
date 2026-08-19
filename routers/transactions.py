@@ -12,6 +12,7 @@ from models.cards import CardModel, Currencies_choice
 from models.transactions import TransactionModel, TransactionStatus_choices
 from models.users import KYCStatus_choice
 from schemas.transactions import TransactionCreateSchema, TransactionResponseSchema
+from utils.currency import get_exchange_rate
 from utils.dependencies import get_current_user
 from utils.security import decrypt_data, encrypt_data
 
@@ -23,18 +24,12 @@ EXCHANGE_RATES = {
 }
 
 
-def calculate_exchanged(
+async def calculate_exchanged(
     sender_currency, receiver_currency, amount: Decimal
 ) -> tuple[Decimal, Decimal]:
     if sender_currency == receiver_currency:
         return amount, Decimal("1.0000")
-    rate_key = (sender_currency, receiver_currency)
-    if rate_key not in EXCHANGE_RATES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Converting from {sender_currency.value} to {receiver_currency.value} is not available",
-        )
-    rate = EXCHANGE_RATES[rate_key]
+    rate = await get_exchange_rate(sender_currency, receiver_currency)
     received = (amount * rate).quantize(Decimal("0.01"))
     return received, rate
 
@@ -50,9 +45,7 @@ async def transfer(
     current_user: UserModel = Depends(get_current_user),
 ):
     if current_user.kyc_status != KYCStatus_choice.VERIFIED:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED, "Your account is not verified"
-        )
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Your account is not verified")
     if payload.sender_card_id == payload.receiver_card_id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Wrong Card")
     card_ids = sorted([payload.sender_card_id, payload.receiver_card_id])
@@ -71,7 +64,7 @@ async def transfer(
     if not receiver_card:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Receiver card not found")
     sent = payload.sent
-    received, rate = calculate_exchanged(
+    received, rate = await calculate_exchanged(
         sender_currency=sender_card.currency,
         receiver_currency=receiver_card.currency,
         amount=sent,
@@ -89,12 +82,11 @@ async def transfer(
         receiver_id=receiver_card.id,
         sent=sent * fee,
         received=received,
-        fee=fee,
+        fee=sent * Decimal("0.02"),
         exchange_rate=rate,
         encryption=encrypt_data(payload_to_encrypt),
     )
     db.add(transaction)
-    await db.commit()
     try:
         sender_card.balance -= sent * fee
         receiver_card.balance += received

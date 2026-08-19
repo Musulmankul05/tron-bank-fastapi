@@ -1,10 +1,9 @@
 import secrets
 import string
 from datetime import timedelta
-from typing import Optional
 
 import pyotp
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +13,8 @@ from models.users import KYCStatus_choice, UserModel
 from schemas.users import (
     BackupEnterSchema,
     KYCSchema,
+    NewPasswordSchema,
+    ResetPasswordSchema,
     TokenSchema,
     TwoFARequiredSchema,
     UserCreateSchema,
@@ -24,6 +25,7 @@ from utils.dependencies import get_2fa_session, get_current_user
 from utils.security import (
     auth,
     check_attempt,
+    get_client_ip,
     hash_backups,
     hash_password,
 <<<<<<< HEAD
@@ -115,28 +117,6 @@ async def logout_user(response: Response):
     return {"message": "Logout success"}
 
 
-@router.get("/users", response_model=list[UserResponseSchema])
-async def get_users(
-    db: AsyncSession = Depends(get_session), username: Optional[str | None] = None
-):
-    query = select(UserModel)
-    if username:
-        query = query.where(UserModel.username == username)
-    result = await db.execute(query)
-    return result.scalars().all()
-
-
-@router.get("/users/{user_id}")
-async def get_user_by_id(user_id: int, db: AsyncSession = Depends(get_session)):
-    query = select(UserModel).where(UserModel.id == user_id)
-    result = await db.execute(query)
-    user = result.scalar_one_or_none()
-
-    if user is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="User not found")
-    return user
-
-
 @router.get("/me", response_model=UserResponseSchema)
 async def get_my_profile(current_user: UserModel = Depends(get_current_user)):
     return current_user
@@ -166,7 +146,7 @@ async def kyc_verification(
             signature=payload.signature,
         )
         db.add(kyc)
-        current_user.kyc_status = KYCStatus_choice.VERIFIED
+        current_user.kyc_status = KYCStatus_choice.PENDING
         await db.commit()
         await db.refresh(kyc)
         return kyc
@@ -292,3 +272,52 @@ async def reset_backups(
         "message": "Backup code is deleted. You can set a new",
         "auth_access_token": token,
     }
+
+
+@router.post("/change-password", response_model=UserResponseSchema)
+async def change_password(
+    payload: NewPasswordSchema,
+    current_user: UserModel = Depends(get_current_user),
+    db: AsyncSession = Depends(get_session),
+):
+    if not verify_password(payload.old_pass, current_user.hashed_password):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Incorrect old password")
+    current_user.hashed_password = hash_password(payload.confirm_pass)
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
+
+
+@router.post("/reset-password", response_model=UserResponseSchema)
+async def reset_password(
+    payload: ResetPasswordSchema,
+    request: Request,
+    db: AsyncSession = Depends(get_session),
+):
+    ip = get_client_ip(request)
+    identifier = f"{payload.username}:{ip}"
+    await check_attempt(identifier)
+
+    query = select(UserModel).where(UserModel.username == payload.username)
+    result = await db.execute(query)
+    user = result.scalar_one_or_none()
+    if not user:
+        await register_failure(identifier)
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "User does not exist")
+    code_query = select(BackupCodesModel).where(BackupCodesModel.user_id == user.id)
+    code_res = await db.execute(code_query)
+    code = code_res.scalar_one_or_none()
+    if not code:
+        await register_failure(identifier)
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid request")
+    if not verify_backups(payload.code, code.code):
+        await register_failure(identifier)
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Incorrect code")
+    user.totp_secret = None
+    user.is_2fa_enabled = False
+    user.hashed_password = hash_password(payload.confirm_pass)
+    await reset_attempts(identifier)
+    await db.delete(code)
+    await db.commit()
+    await db.refresh(user)
+    return user

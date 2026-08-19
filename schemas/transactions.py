@@ -3,8 +3,6 @@ from decimal import Decimal
 
 from pydantic import BaseModel, computed_field
 
-from models.transactions import TransactionStatus_choices
-
 
 class TransactionResponseSchema(BaseModel):
     sender_id: int
@@ -13,7 +11,7 @@ class TransactionResponseSchema(BaseModel):
     received: Decimal
     exchange_rate: Decimal
     fee: Decimal
-    status: TransactionStatus_choices
+    status: str
     created_at: datetime
     updated_at: datetime
 
