@@ -7,8 +7,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-COPY . .
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project
 
-ENV UV_NO_DEV=1
-RUN uv sync --locked
-CMD ["uv", "run", "uvicorn", "main:app"]
+COPY . .
+RUN uv sync --frozen
+
+EXPOSE 8000
+
+CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
