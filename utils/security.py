@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from fastapi import HTTPException, Request, status
 from pwdlib import PasswordHash
 
-from .redis import redis_client
+from .redis import get_redis
 
 load_dotenv()
 
@@ -63,23 +63,37 @@ def get_client_ip(request: Request):
 
 async def check_attempt(user_id):
     key = f"failed_2fa:{user_id}"
-    attempts = await redis_client.get(key)
 
-    if attempts and int(attempts) >= 5:
-        raise HTTPException(
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            "Too many failed attempts. Try again in 20 minutes",
-        )
+    redis_client = get_redis()
+
+    try:
+        attempts = await redis_client.get(key)
+
+        if attempts and int(attempts) >= 5:
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                "Too many failed attempts. Try again in 20 minutes",
+            )
+    finally:
+        await redis_client.aclose()
 
 
 async def register_failure(user_id):
     key = f"failed_2fa:{user_id}"
-    attempts = await redis_client.incr(key)
+    redis_client = get_redis()
+    try:
+        attempts = await redis_client.incr(key)
 
-    if attempts == 1:
-        await redis_client.expire(key, 900)
-
+        if attempts == 1:
+            await redis_client.expire(key, 900)
+    finally:
+        await redis_client.aclose()
+        
 
 async def reset_attempts(user_id):
     key = f"failed_2fa:{user_id}"
-    await redis_client.delete(key)
+    redis_client = get_redis()
+    try:
+        await redis_client.delete(key)
+    finally:
+        await redis_client.aclose()

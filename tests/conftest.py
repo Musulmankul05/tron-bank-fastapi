@@ -5,13 +5,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pytest_asyncio
+import redis.asyncio as aioredis
 from dotenv import load_dotenv
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from database import Base, get_session
 from main import app
-from utils.redis import redis_client
 
 load_dotenv()
 
@@ -45,11 +45,17 @@ async def prepare_database():
 
 @pytest_asyncio.fixture(autouse=True)
 async def clean_redis():
-    await redis_client.flushdb()
+    client = aioredis.from_url(
+        os.getenv("REDIS_URL"),
+        decode_responses=True,
+    )
 
-    yield
-
-    await redis_client.flushdb()
+    try:
+        await client.flushdb()
+        yield
+        await client.flushdb()
+    finally:
+        await client.aclose()
 
 
 @pytest_asyncio.fixture
