@@ -113,7 +113,7 @@ async def get_transactions(
     current_user: UserModel = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
 ):
-<<<<<<< HEAD
+
     cards_query = select(CardModel.id).where(CardModel.owner_id == current_user.id)
     query = select(TransactionModel).where(
         or_(
@@ -121,27 +121,6 @@ async def get_transactions(
             TransactionModel.receiver_id.in_(cards_query),
         )
     ).order_by(TransactionModel.created_at.desc()).limit(limit).offset(offset)
-    result = await db.execute(query)
-    transactions = result.scalars().all()
-    return transactions
-=======
-    if current_user.kyc_status != KYCStatus_choice.VERIFIED:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED, "Your account is not verified"
-        )
-    cards_query = select(CardModel.id).where(CardModel.owner_id == current_user.id)
-    query = (
-        select(TransactionModel)
-        .where(
-            or_(
-                TransactionModel.sender_id.in_(cards_query),
-                TransactionModel.receiver_id.in_(cards_query),
-            )
-        )
-        .order_by(TransactionModel.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-    )
     result = await db.execute(query)
     transactions = result.scalars().all()
     return transactions
@@ -183,4 +162,3 @@ async def transaction(
         "created_at": tx.created_at,
         "payload": decrypted_tx,
     }
->>>>>>> api/2fa

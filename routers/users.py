@@ -28,11 +28,8 @@ from utils.security import (
     get_client_ip,
     hash_backups,
     hash_password,
-<<<<<<< HEAD
-=======
     register_failure,
     reset_attempts,
->>>>>>> api/rate-limit
     verify_backups,
     verify_password,
 )
