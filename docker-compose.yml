@@ -44,6 +44,17 @@ services:
     volumes:
      - rabbitmq_data:/var/lib/rabbitmq 
 
+  worker:
+    build: .
+    container_name: tron_worker
+    command: uv run python -m  workers.notification_worker
+    restart: always
+    environment:
+      - RABBITMQ_URL=amqp://admin:password@rabbitmq:5672/
+    depends_on:
+      rabbitmq:
+        condition: service_started
+
   web:
     build: .
     container_name: tron_api
