@@ -1,3 +1,4 @@
+from utils.rabbitmq import rabbitmq_service
 from datetime import datetime
 from decimal import Decimal
 
@@ -91,14 +92,18 @@ async def transfer(
         sender_card.balance -= sent * fee
         receiver_card.balance += received
         transaction.status = TransactionStatus_choices.COMPLETED
+        await rabbitmq_service.publish_event(
+            routing_key="transfer.created",
+            message_body={"from_user": sender_card.owner.username, "to_user": receiver_card.owner.username, "amount": float(sent)}
+        )
         await db.commit()
         await db.refresh(transaction)
         return transaction
-    except Exception:
+    except Exception as e:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Transaction failed",
+            detail=f"Transaction failed {e}",
         )
 
 

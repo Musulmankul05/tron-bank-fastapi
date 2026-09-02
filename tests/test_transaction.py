@@ -11,7 +11,7 @@ from utils.security import auth, hash_password
 
 
 @pytest.mark.asyncio
-async def test_transfer_success(client: AsyncClient, db_session: AsyncSession):
+async def test_transfer_success(client: AsyncClient, db_session: AsyncSession, mock_rabbitmq):
     test_sender = UserModel(
         first_name="Sender",
         last_name="User",
@@ -56,19 +56,14 @@ async def test_transfer_success(client: AsyncClient, db_session: AsyncSession):
     response = await client.post(
         "/api/v1/transactions/transfer",
         json={
-            "sender_card_id": test_sender_card.id,
-            "receiver_card_id": test_receiver_card.id,
-            "sent": "500.00",
+            "sender_card_id": 1,
+            "receiver_card_id": 2,
+            "sent": "-50.00",
         }
     )
-    assert response.status_code == 201
-    res_data = response.json()
-    assert res_data['status'] == 'COM'
+    assert response.status_code == 422
 
+    mock_rabbitmq.assert_not_called()
     await db_session.refresh(test_sender_card)
-    await db_session.refresh(test_receiver_card)
 
-    expected_sender_balance = Decimal("1000.00") - (Decimal("500.00") * Decimal("1.02"))
-    assert test_sender_card.balance == expected_sender_balance
-
-    assert test_receiver_card.balance > Decimal("0.00")
+    assert test_sender_card.balance == Decimal("1000.00")

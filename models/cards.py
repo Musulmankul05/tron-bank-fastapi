@@ -35,7 +35,7 @@ class CardModel(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    owner: Mapped["UserModel"] = relationship(back_populates="cards")
+    owner: Mapped["UserModel"] = relationship(back_populates="cards", lazy="selectin")
     currency: Mapped[Currencies_choice] = mapped_column(
         Enum(Currencies_choice), default=Currencies_choice.SOM
     )

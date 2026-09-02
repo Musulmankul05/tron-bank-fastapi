@@ -1,3 +1,5 @@
+from utils.rabbitmq import rabbitmq_service
+from unittest.mock import AsyncMock
 import os
 import sys
 from pathlib import Path
@@ -14,8 +16,13 @@ from database import Base, get_session
 from main import app
 
 load_dotenv()
+DB_ADMIN = os.getenv("DB_ADMIN", "postgres")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
+DB_NAME = os.getenv("TEST_DB_NAME", "tron-test")
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = os.getenv("DB_PORT", "5432")
 
-TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
+TEST_DATABASE_URL = f"postgresql+asyncpg://{DB_ADMIN}:{DB_PASSWORD}@{DB_HOST}:5432/{DB_NAME}"
 
 if not TEST_DATABASE_URL:
     raise RuntimeError("TEST_DATABASE_URL is not set")
@@ -56,6 +63,14 @@ async def clean_redis():
         await client.flushdb()
     finally:
         await client.aclose()
+
+@pytest_asyncio.fixture(autouse=True)
+def mock_rabbitmq(monkeypatch):
+    mock_publish = AsyncMock()
+    monkeypatch.setattr(rabbitmq_service, "connect", AsyncMock())
+    monkeypatch.setattr(rabbitmq_service, "close", AsyncMock())
+    monkeypatch.setattr(rabbitmq_service, "publish_event", mock_publish)
+    return mock_publish
 
 
 @pytest_asyncio.fixture

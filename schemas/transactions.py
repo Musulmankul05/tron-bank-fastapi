@@ -1,13 +1,13 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel, Field, computed_field
 
 
 class TransactionResponseSchema(BaseModel):
     sender_id: int
     receiver_id: int
-    sent: Decimal
+    sent: Decimal = Field(..., gt=0)
     received: Decimal
     exchange_rate: Decimal
     fee: Decimal
@@ -23,7 +23,8 @@ class TransactionResponseSchema(BaseModel):
     def updated_at_formatted(self) -> str:
         return self.updated_at.strftime("%d.%m.%Y %H:%M")
 
+
 class TransactionCreateSchema(BaseModel):
     sender_card_id: int
     receiver_card_id: int
-    sent: Decimal
+    sent: Decimal = Field(..., gt=0)

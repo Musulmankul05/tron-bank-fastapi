@@ -1,11 +1,21 @@
 import uuid
+from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, Request
 
 from routers import cards, transactions, users
+from utils.rabbitmq import rabbitmq_service
 
-app = FastAPI(title="root")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await rabbitmq_service.connect()
+    yield
+    await rabbitmq_service.close()
+
+
+app = FastAPI(title="root", lifespan=lifespan)
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(cards.router, prefix="/api/v1")
 app.include_router(transactions.router, prefix="/api/v1")
